@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Recurse -Force)",
+      "Bash(Select-Object -Property FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "PowerShell(cd \"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\apps\\\\api\\\\src\"; Get-ChildItem -Recurse -Force | Where-Object {-not $_.PSIsContainer} | Select-Object -Property @{Name=\"File\";Expression={$_.Name}}, @{Name=\"Path\";Expression={$_.FullName -replace [regex]::Escape\\(\"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\apps\\\\api\\\\src\\\\\"\\)}} | Format-Table -AutoSize -Wrap)",
+      "PowerShell(cd \"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\apps\\\\worker\\\\src\"; Get-ChildItem -Recurse -Force | Where-Object {-not $_.PSIsContainer} | Select-Object -Property @{Name=\"File\";Expression={$_.Name}}, @{Name=\"Path\";Expression={$_.FullName -replace [regex]::Escape\\(\"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\apps\\\\worker\\\\src\\\\\"\\)}} | Format-Table -AutoSize -Wrap)",
+      "PowerShell(cd \"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\apps\\\\web\\\\src\"; Get-ChildItem -Recurse -Force | Where-Object {-not $_.PSIsContainer} | Select-Object -Property @{Name=\"File\";Expression={$_.Name}}, @{Name=\"Path\";Expression={$_.FullName -replace [regex]::Escape\\(\"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\apps\\\\web\\\\src\\\\\"\\)}} | Format-Table -AutoSize -Wrap)",
+      "PowerShell(cd \"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\packages\\\\shared\\\\src\"; Get-ChildItem -Recurse -Force | Where-Object {-not $_.PSIsContainer} | Select-Object Name)",
+      "PowerShell(cd \"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\packages\\\\db\\\\src\"; Get-ChildItem -Recurse -Force | Where-Object {-not $_.PSIsContainer} | Select-Object Name)",
+      "PowerShell(cd \"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\packages\\\\db\"; Get-ChildItem -Force | Where-Object {-not $_.PSIsContainer} | Select-Object Name)",
+      "PowerShell(cd \"c:\\\\Users\\\\PMLS\\\\Desktop\\\\code\\\\New folder\\\\packages\\\\queue\\\\src\"; Get-ChildItem -Recurse -Force | Where-Object {-not $_.PSIsContainer} | Select-Object Name)"
+    ]
+  }
+}

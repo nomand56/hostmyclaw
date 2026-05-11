@@ -1,0 +1,28 @@
+{
+  "name": "@hostmyclaw/db",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "migrate:latest": "node --env-file=../../.env --require tsx/cjs ./node_modules/knex/bin/cli.js --knexfile ./knexfile.cjs migrate:latest",
+    "migrate:rollback": "node --env-file=../../.env --require tsx/cjs ./node_modules/knex/bin/cli.js --knexfile ./knexfile.cjs migrate:rollback",
+    "seed:run": "node --env-file=../../.env --require tsx/cjs ./node_modules/knex/bin/cli.js --knexfile ./knexfile.cjs seed:run"
+  },
+  "dependencies": {
+    "knex": "^3.1.0",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}

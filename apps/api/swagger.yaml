@@ -1,0 +1,1122 @@
+openapi: 3.0.3
+info:
+  title: HostMyClaw API
+  description: |
+    REST API for **HostMyClaw** — a SaaS platform for hosting OpenClaw AI assistants.
+
+    ## Authentication
+    Most endpoints require a Bearer JWT token. Obtain one via `POST /api/v1/auth/login`
+    or `POST /api/v1/auth/register`.
+
+    Include in every protected request:
+    ```
+    Authorization: Bearer <accessToken>
+    ```
+
+    Tokens expire in **15 minutes**.
+
+    ## Plans
+    | Plan     | Assistants | Price/month |
+    |----------|-----------|-------------|
+    | free     | 0         | $0          |
+    | starter  | 1         | $29         |
+    | growth   | 5         | $79         |
+    | pro      | 999       | $199        |
+
+    ## Assistant lifecycle
+    `draft` → `queued` → `deploying` → `running` → `stopping` → `stopped`
+    Any state can transition to `failed`.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:4000
+    description: Local development
+  - url: https://api.yourdomain.com
+    description: Production
+
+tags:
+  - name: System
+    description: Health and service status
+  - name: Auth
+    description: Registration, login, and current-user profile
+  - name: Assistants
+    description: Create and manage OpenClaw assistant deployments
+  - name: Billing
+    description: Stripe-powered subscription and billing management
+  - name: Templates
+    description: Pre-built assistant configurations
+  - name: Skills
+    description: Capabilities that can be attached to assistants
+  - name: Webhooks
+    description: Stripe event receiver (internal use)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT obtained from /api/v1/auth/login or /api/v1/auth/register
+
+  schemas:
+    # ── Primitives ──────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Not found
+      required: [error]
+
+    AppError:
+      type: object
+      properties:
+        code:
+          type: string
+          example: LIMIT_EXCEEDED
+        error:
+          type: string
+          example: Assistant limit reached for your plan
+      required: [code, error]
+
+    # ── Domain models ────────────────────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: usr_4xK9mB2nQ
+        email:
+          type: string
+          format: email
+          example: jane@example.com
+        name:
+          type: string
+          example: Jane Doe
+        plan:
+          type: string
+          enum: [free, starter, growth, pro]
+          example: growth
+        created_at:
+          type: string
+          format: date-time
+      required: [id, email, name, plan, created_at]
+
+    Assistant:
+      type: object
+      properties:
+        id:
+          type: string
+          example: asst_7pL3kR9tY
+        user_id:
+          type: string
+          example: usr_4xK9mB2nQ
+        name:
+          type: string
+          example: My Sales Bot
+        template_id:
+          type: string
+          nullable: true
+          example: tmpl_sales
+        status:
+          type: string
+          enum: [draft, queued, deploying, running, stopping, stopped, failed]
+          example: running
+        config:
+          type: object
+          additionalProperties: true
+          example: { language: "en", maxTokens: 2048 }
+        container_name:
+          type: string
+          nullable: true
+          example: openclaw_asst7pl3kr9ty
+        container_id:
+          type: string
+          nullable: true
+        container_port:
+          type: integer
+          nullable: true
+          example: 8501
+        subdomain:
+          type: string
+          nullable: true
+          example: asst7pl3kr9ty
+        health_status:
+          type: string
+          nullable: true
+          example: healthy
+        last_health_at:
+          type: string
+          format: date-time
+          nullable: true
+        uptime_since:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        deployed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, user_id, name, status, created_at, updated_at]
+
+    AssistantStatus:
+      type: object
+      properties:
+        assistantId:
+          type: string
+          example: asst_7pL3kR9tY
+        status:
+          type: string
+          enum: [draft, queued, deploying, running, stopping, stopped, failed]
+          example: running
+        containerName:
+          type: string
+          nullable: true
+          example: openclaw_asst7pl3kr9ty
+        containerPort:
+          type: integer
+          nullable: true
+          example: 8501
+        url:
+          type: string
+          format: uri
+          nullable: true
+          example: https://asst7pl3kr9ty.assistants.yourdomain.com
+        lastHealthCheck:
+          type: string
+          format: date-time
+          nullable: true
+        healthStatus:
+          type: string
+          nullable: true
+          example: healthy
+        uptimeSince:
+          type: string
+          format: date-time
+          nullable: true
+        deploymentJobId:
+          type: string
+          nullable: true
+          example: job_xM7nK2pQ
+        error:
+          type: string
+          nullable: true
+      required: [assistantId, status]
+
+    Log:
+      type: object
+      properties:
+        id:
+          type: string
+        assistant_id:
+          type: string
+        job_id:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [deployment, runtime, health]
+        level:
+          type: string
+          enum: [info, warn, error]
+        message:
+          type: string
+        metadata:
+          type: object
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+      required: [id, assistant_id, type, level, message, timestamp]
+
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          example: sub_2nR8pW6vX
+        user_id:
+          type: string
+        stripe_subscription_id:
+          type: string
+          nullable: true
+        stripe_price_id:
+          type: string
+          nullable: true
+        plan:
+          type: string
+          enum: [free, starter, growth, pro]
+          example: growth
+        status:
+          type: string
+          enum: [active, past_due, canceled, trialing]
+          example: active
+        assistant_limit:
+          type: integer
+          example: 5
+        current_period_start:
+          type: string
+          format: date-time
+          nullable: true
+        current_period_end:
+          type: string
+          format: date-time
+          nullable: true
+        cancel_at_period_end:
+          type: boolean
+          example: false
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, user_id, plan, status, assistant_limit]
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+          example: tmpl_customer_support
+        name:
+          type: string
+          example: Customer Support Bot
+        description:
+          type: string
+        category:
+          type: string
+          example: support
+        config_defaults:
+          type: object
+          additionalProperties: true
+        openclaw_config:
+          type: object
+          additionalProperties: true
+        required_skill_ids:
+          type: array
+          items:
+            type: string
+        recommended_skill_ids:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required: [id, name, is_active]
+
+    Skill:
+      type: object
+      properties:
+        id:
+          type: string
+          example: skl_email
+        name:
+          type: string
+          example: Email Integration
+        description:
+          type: string
+        icon_url:
+          type: string
+          format: uri
+          nullable: true
+        config_schema:
+          type: object
+          additionalProperties: true
+        openclaw_skill_name:
+          type: string
+          example: email
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required: [id, name, openclaw_skill_name, is_active]
+
+# ── Paths ────────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── System ───────────────────────────────────────────────────────────────────
+  /health:
+    get:
+      tags: [System]
+      summary: Service health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  # ── Auth ─────────────────────────────────────────────────────────────────────
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      operationId: registerUser
+      description: Creates a new user account and returns an access token. A free-tier subscription is created automatically.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: jane@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  example: securepassword123
+                name:
+                  type: string
+                  minLength: 1
+                  example: Jane Doe
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+                  accessToken:
+                    type: string
+                    description: JWT valid for 15 minutes
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with email and password
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: jane@example.com
+                password:
+                  type: string
+                  example: securepassword123
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                    description: JWT valid for 15 minutes
+                  expiresIn:
+                    type: integer
+                    example: 900
+                    description: Token lifetime in seconds
+        "401":
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user profile
+      operationId: getMe
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Assistants ───────────────────────────────────────────────────────────────
+  /api/v1/assistants:
+    get:
+      tags: [Assistants]
+      summary: List all assistants
+      operationId: listAssistants
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Array of assistants owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assistants:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Assistant"
+        "401":
+          description: Unauthorized
+
+    post:
+      tags: [Assistants]
+      summary: Create a new assistant
+      operationId: createAssistant
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  example: My Support Bot
+                templateId:
+                  type: string
+                  nullable: true
+                  example: tmpl_customer_support
+                  description: Optional template to base the assistant on
+                skills:
+                  type: array
+                  items:
+                    type: string
+                  default: []
+                  example: [skl_email, skl_calendar]
+                  description: Skill IDs to attach
+                config:
+                  type: object
+                  additionalProperties: true
+                  default: {}
+                  description: Assistant-specific configuration overrides
+      responses:
+        "201":
+          description: Assistant created in draft state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Assistant"
+        "401":
+          description: Unauthorized
+
+  /api/v1/assistants/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        example: asst_7pL3kR9tY
+
+    get:
+      tags: [Assistants]
+      summary: Get assistant by ID
+      operationId: getAssistant
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Assistant details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Assistant"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags: [Assistants]
+      summary: Update assistant name or config
+      operationId: updateAssistant
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  example: Renamed Bot
+                config:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Updated assistant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Assistant"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [Assistants]
+      summary: Delete assistant
+      operationId: deleteAssistant
+      description: If the assistant has a running container, a teardown job is enqueued before deletion.
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Deleted — no content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/assistants/{id}/deploy:
+    post:
+      tags: [Assistants]
+      summary: Deploy assistant to a container
+      operationId: deployAssistant
+      description: |
+        Enqueues a deployment job. The assistant must be in `draft`, `stopped`, or `failed` status.
+
+        **Requires** an active paid subscription with at least one free assistant slot.
+        On success the assistant transitions to `queued` and a `jobId` is returned.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: asst_7pL3kR9tY
+      responses:
+        "202":
+          description: Deployment enqueued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    example: job_xM7nK2pQ
+                  assistantId:
+                    type: string
+                    example: asst_7pL3kR9tY
+                  status:
+                    type: string
+                    example: queued
+        "400":
+          description: Assistant is in an invalid state for deployment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+        "403":
+          description: Subscription required or assistant limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+        "404":
+          description: Assistant not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: No container ports available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+
+  /api/v1/assistants/{id}/stop:
+    post:
+      tags: [Assistants]
+      summary: Stop a running assistant
+      operationId: stopAssistant
+      description: The assistant must be in `running` status. It transitions to `stopping`.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stop initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: stopping
+        "400":
+          description: Assistant is not running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/assistants/{id}/restart:
+    post:
+      tags: [Assistants]
+      summary: Restart an assistant container
+      operationId: restartAssistant
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Restart initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: restarting
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/assistants/{id}/status:
+    get:
+      tags: [Assistants]
+      summary: Get full deployment status
+      operationId: getAssistantStatus
+      description: Returns the current status, container info, public URL, health, and latest deployment job ID.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deployment status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantStatus"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/assistants/{id}/health:
+    get:
+      tags: [Assistants]
+      summary: Proxy health check to the container
+      operationId: getAssistantHealth
+      description: |
+        Forwards a `GET /healthz` request to the running container with a 5-second timeout.
+        The response code and body are passed through directly from the container.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Container is healthy (response passthrough)
+        "404":
+          description: Assistant not found or not running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Container unreachable or timed out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: unreachable
+
+  /api/v1/assistants/{id}/logs:
+    get:
+      tags: [Assistants]
+      summary: Get paginated assistant logs
+      operationId: getAssistantLogs
+      description: Returns logs in descending timestamp order. Use `nextCursor` to page backwards.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [deployment, runtime, health]
+          description: Filter logs by type
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+            default: 50
+          description: Max entries to return (default 50, max 200)
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: ISO timestamp — returns entries older than this value (pagination cursor)
+      responses:
+        "200":
+          description: Log page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Log"
+                  nextCursor:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: Pass as `cursor` to fetch the next page. Null when no more pages.
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Billing ───────────────────────────────────────────────────────────────────
+  /api/v1/billing/checkout:
+    post:
+      tags: [Billing]
+      summary: Create a Stripe checkout session
+      operationId: createCheckout
+      description: |
+        Returns a Stripe-hosted checkout URL. After payment the user is redirected to
+        `FRONTEND_URL/dashboard?checkout=success`.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planId]
+              properties:
+                planId:
+                  type: string
+                  enum: [starter, growth, pro]
+                  example: growth
+      responses:
+        "200":
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkoutUrl:
+                    type: string
+                    format: uri
+                    example: https://checkout.stripe.com/pay/cs_test_...
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/billing/subscription:
+    get:
+      tags: [Billing]
+      summary: Get current subscription
+      operationId: getSubscription
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current subscription (null for free-tier users with no Stripe subscription)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscription:
+                    nullable: true
+                    oneOf:
+                      - $ref: "#/components/schemas/Subscription"
+                      - type: "null"
+
+  /api/v1/billing/portal:
+    post:
+      tags: [Billing]
+      summary: Create a Stripe billing portal session
+      operationId: createBillingPortal
+      description: |
+        Returns a Stripe-hosted billing portal URL where users can manage their
+        subscription, update payment methods, or cancel. Requires an existing
+        Stripe customer account (i.e. the user must have checked out at least once).
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Portal session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  portalUrl:
+                    type: string
+                    format: uri
+                    example: https://billing.stripe.com/session/...
+        "404":
+          description: No Stripe billing account found for this user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+
+  # ── Templates ─────────────────────────────────────────────────────────────────
+  /api/v1/templates:
+    get:
+      tags: [Templates]
+      summary: List active templates
+      operationId: listTemplates
+      responses:
+        "200":
+          description: Active templates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  templates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Template"
+
+  /api/v1/templates/{id}:
+    get:
+      tags: [Templates]
+      summary: Get template by ID
+      operationId: getTemplate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: tmpl_customer_support
+      responses:
+        "200":
+          description: Template details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "404":
+          description: Template not found or inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Skills ────────────────────────────────────────────────────────────────────
+  /api/v1/skills:
+    get:
+      tags: [Skills]
+      summary: List active skills
+      operationId: listSkills
+      responses:
+        "200":
+          description: Active skills
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Skill"
+
+  /api/v1/skills/{id}:
+    get:
+      tags: [Skills]
+      summary: Get skill by ID
+      operationId: getSkill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: skl_email
+      responses:
+        "200":
+          description: Skill details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Skill"
+        "404":
+          description: Skill not found or inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Webhooks ──────────────────────────────────────────────────────────────────
+  /api/v1/webhooks/stripe:
+    post:
+      tags: [Webhooks]
+      summary: Stripe webhook receiver
+      operationId: stripeWebhook
+      description: |
+        Receives and verifies Stripe events. The request body **must be raw bytes**
+        (not re-parsed JSON) and the `Stripe-Signature` header must be present.
+
+        **Handled events:**
+
+        | Event | Effect |
+        |---|---|
+        | `customer.subscription.created` | Upserts subscription, updates user plan |
+        | `customer.subscription.updated` | Upserts subscription, updates user plan |
+        | `customer.subscription.deleted` | Marks subscription `canceled`, resets user to `free` |
+        | `invoice.payment_failed` | Marks subscription `past_due` |
+      parameters:
+        - name: stripe-signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Stripe-generated HMAC signature for payload verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Raw Stripe event payload (see Stripe docs for event shapes)
+      responses:
+        "200":
+          description: Event received and processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+        "400":
+          description: Signature verification failed
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Invalid signature
