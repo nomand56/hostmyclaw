@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 
 export const authPlugin = fp(async (app: FastifyInstance) => {
   await app.register(jwt, {
-    secret: process.env.JWT_SECRET!,
-    sign: { expiresIn: '15m' },
+    secret: process.env.INTERNAL_JWT_SECRET!,
+    sign: { expiresIn: '7d' },
   });
 });

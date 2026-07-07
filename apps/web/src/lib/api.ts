@@ -61,5 +61,7 @@ export const api = {
       request<{ checkoutUrl: string }>('/billing/checkout', { method: 'POST', body: JSON.stringify({ planId }) }),
     subscription: () => request<{ subscription: unknown }>('/billing/subscription'),
     portal: () => request<{ portalUrl: string }>('/billing/portal', { method: 'POST' }),
+    completeCheckout: (sessionId: string) =>
+      request<{ success: boolean }>('/billing/checkout/success', { method: 'POST', body: JSON.stringify({ session_id: sessionId }) }),
   },
 };

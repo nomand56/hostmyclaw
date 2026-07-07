@@ -25,6 +25,7 @@ export async function deployAssistant(job: DeployJobPayload): Promise<void> {
   await logDeploy(assistantId, jobId, 'info', 'Starting deployment');
 
   try {
+
     const envVars = await buildEnvVars(job);
     await logDeploy(assistantId, jobId, 'info', 'Pulling image and building env vars');
 
@@ -44,6 +45,8 @@ export async function deployAssistant(job: DeployJobPayload): Promise<void> {
       deployed_at: new Date(),
       updated_at: new Date(),
     });
+
+    
     await db('deployment_jobs').where({ id: jobId }).update({ status: 'completed', finished_at: new Date() });
     await db('port_pool').where({ port: job.port }).update({ assistant_id: assistantId });
     await logDeploy(assistantId, jobId, 'info', 'Deployment successful');

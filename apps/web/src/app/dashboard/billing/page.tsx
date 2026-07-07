@@ -14,7 +14,23 @@ export default function BillingPage() {
   const [sub, setSub] = useState<Subscription | null>(null);
 
   useEffect(() => {
-    api.billing.subscription().then((r) => setSub(r.subscription as Subscription));
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+
+    const loadSubscription = () => {
+      api.billing.subscription().then((r) => setSub(r.subscription as Subscription));
+    };
+
+    if (sessionId) {
+      api.billing.completeCheckout(sessionId).then(() => {
+        loadSubscription();
+        const next = new URL(window.location.href);
+        next.searchParams.delete('session_id');
+        window.history.replaceState({}, '', next.toString());
+      });
+    } else {
+      loadSubscription();
+    }
   }, []);
 
   async function upgrade(planId: string) {

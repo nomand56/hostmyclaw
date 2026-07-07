@@ -1,3 +1,8 @@
 import Docker from 'dockerode';
 
-export const docker = new Docker({ socketPath: '/var/run/docker.sock' });
+const isWindows = process.platform === 'win32';
+export const docker = new Docker(
+  isWindows
+    ? { socketPath: '//./pipe/dockerDesktopLinuxEngine' }
+    : { socketPath: '/var/run/docker.sock' }
+);
